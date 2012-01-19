@@ -1,0 +1,6 @@
+Revision history for Perl extension Black::HTTP.
+
+0.01  Thu Jan 19 10:51:51 2012
+	- original version; created by h2xs 1.23 with options
+		-AXn Black::HTTP
+
