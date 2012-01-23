@@ -3,338 +3,260 @@ package Black::HTTP;
 use 5.010001;
 use strict;
 use warnings;
+use MD5;
+use MIME::Base64;
+use Exporter;
 
-# ezek nem biztos hogy kellenek, Response depjei
+# just for debbugging
+use Data::Dump qw-dump-;
+
 use constant 'DEBUG' => 0;
 use constant 'ERRORS' => 0;
-use Data::Dump qw-dump-;
-use Switch;
-use MD5;
 
-# Request depjei
+no strict 'refs';
+no strict 'subs';
 
-# switchet nem hasznalunk mert sourcefilterrel van osszerakva
-# use Switch;
+our (@ISA, $VERSION);
 
-use MIME::Base64;
-
-#use constant 'DEBUG' => 0;
-#use constant 'ERRORS' => 0;
-
-# ezt nem akarjuk
-# no strict 'refs'; 
-                              
-
-
-require Exporter;
-
-our @ISA = qw(Exporter);
-
-# Items to export into callers namespace by default. Note: do not export
-# names by default without a very good reason. Use EXPORT_OK instead.
-# Do not simply export all your public functions/methods/constants.
-
-# This allows declaration	use Black::HTTP ':all';
-# If you do not need this, moving things directly into @EXPORT or @EXPORT_OK
-# will save memory.
+@ISA = qw/Exporter/;
 
 our %EXPORT_TAGS = (
     'all' => [ qw( ) ]
 );
 
 our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
+#our @EXPORT_OK = ( );
+our @EXPORT = qw/
+    new get set
+/;
 
-our @EXPORT = qw(
-	
-);
-
-our $VERSION = '0.01';
+$VERSION = '0.01';
 
 # Na az van hogy osszemasoltam a ket modult, ugyhogy omlesztve vannak itt a szarok.
 # ebbol kene egy tiszta verziot osszehozni
 
 
 
+# TODO:
+# - gzip
+# - keep alive
 
-
-
-#
-# CJ::HTTP::Request pm copy paste
-#
-
-
-
-sub getopts
-{
-    my $self = shift;
-    my @ARGT;
-    my %ret;
-    my %long = (
-	#long			short, shifts, description
+	#
 	# DEBUGGING AND ETC
-	'debug' =>		['d',	0,	'turn on debug'],
+	#
+#	'debug' =>		[0,	'turn on debug'],
+	#
 	# REQUEST LINE
-	'url' =>		['u',	1,	'set url'],
-	'method' =>		['M',	1,	'set request[ed] method'],
-	'uri' =>		['U',	1,	'set arbitary request URI'],
-	'protocol' =>		['P',	1,	'set request protocol'],
+	#
+#	'url' =>		[1,	'set url'],
+#	'method' =>		[1,	'set request[ed] method'],
+#	'uri' =>		[1,	'set arbitary request URI'],
+#	'protocol' =>		[1,	'set request protocol'],
+	#
 	# HEADERS
-	'vhost' =>		['v',	1,	'vhost, set Host header'],
-	'headers' =>		['H',	1,	'set Header'],
-	'no-default-headers' =>	['N',	0,	'dont set default Headers'],
-	'strict-headers' =>	['S',	1,	'set Strict Header'],
-	'crlf' =>		['',	1,	'sortores. defaults to \r\n'],
-	'hfs' =>		['',	1,	'header field separator. defaults to ": "'],
-	'http-auth' =>		['A',	1,	'basic http auth'],
-	'help' =>		['',	0,	'dump help'],
-	'postdata' =>		['p',	1,	'post data'],
-	'rawpostdata' =>	['r',	1,	'raw post data'],
-    );
-#	dump \%long;
-#	short map
-    my %short = map { ${$long{$_}}[0] => $_ } keys %long;
-#	dump \%short;
-    while (my $opt = shift @ARGV)
-    {
-	my $o;
-	if (substr ($opt, 0, 2) eq '--')
-	{
-	    # HANDLE LONG params
-	    $o = substr $opt, 2;
-	    my @v;
-	    if(!$long{$o})
-	    {
-		CJ::HTTP::Request::getopts_error($opt);
-		push @ARGT, $opt;
-	    }
-	    elsif(${$long{$o}}[1] == 0)
-	    {
-		$ret{$o} = 1;
-	    }
-	    elsif(${$long{$o}}[1] == 1)
-	    {
-		$ret{$o} = shift @ARGV;
-	    }
-	    else
-	    {
-		for(my $i=0;$i<${$long{$o}}[1];$i++)
-		{
-		    push @v, shift @ARGV;
-		}
-		$ret{$o} = [@v];
-	    }
-	}
-	elsif (substr ($opt, 0, 1) eq '-')
-	{
-	    $o = substr $opt, 1;
-	    if(!$short{$o})
-	    {
-		CJ::HTTP::Request::getopts_error($opt);
-		push @ARGT, $opt;
-	    }
-	    else
-	    {
-		unshift @ARGV, '--'.$short{$o}; 
-	    }
-	}
-	else
-	{
-	    CJ::HTTP::Request::getopts_error($opt);
-	    push @ARGT, $opt;
-	}
-    }
-    @ARGV = @ARGT;
-    # help/usage/bullshit
-    if(CJ::HTTP::Request::in_array('help', keys %ret))
-    {
-	print STDERR "Options\n";
-        foreach my $k (keys %long)
-	{
-	    my $o_l = '--'.$k;
-	    my $o_s = ${$long{$k}}[0]?'-'.${$long{$k}}[0]:'  ';
-	    my $o_d = ${$long{$k}}[2];
-	    printf STDERR "\t%s %-16s %s\n", $o_s, $o_l, $o_d;
-	}
-	exit;
-	print STDERR "\n";
-    }
-    return %ret;
-}
-
-sub getopts_error
-{
-    return if !ERRORS;
-    my $opt = shift;
-    CJ::HTTP::Request::error("getopts Pushing '$opt' to \@ARGV");
-}
-sub error
-{
-    return if !ERRORS;
-    my $msg = shift;
-    print STDERR "+ CJ::HTTP::Request->$msg\n";
-}
-
-sub debug
-{
-    return if !DEBUG;
-    my $this = shift;
-    my $var = shift;
-    my $val = eval($var)||'';
-    printf STDERR "+ \e[1;34mCJ::HTTP::Request->debug: \e[1;36m %-36s : \e[1;33m'%s'\e[0;39m\n", $var, $val;
-}
+	#
+#	'vhost' =>		[1,	'vhost, set Host header'],
+#	'headers' =>		[1,	'set Header'],
+#	'no-default-headers' =>	[0,	'dont set default Headers'],
+#	'strict-headers' =>	[1,	'set Strict Header'],
+#	'crlf' =>		[1,	'sortores. defaults to \r\n'],
+#	'hfs' =>		[1,	'header field separator. defaults to ": "'],
+#	'http-auth' =>		[1,	'basic http auth'],
+#	'help' =>		[0,	'dump help'],
+#	'postdata' =>		[1,	'post data'],
+#	'rawpostdata' =>	[1,	'raw post data'],
 
 
 sub new
 {
     my $type = shift;
     my $this = {};
-    $this->{'params'} = {};	# parameters given by the user
+    $this->{'options'} = {};	# parameters given by the user
+    $this->{'build'} = {};
     $this->{'request'} = {};	# request object
     $this->{'response'} = {};	# tha http request
-    my %params = @_;
-    while (my ($k, $v) = each %params)
+    my %options = @_;
+    while (my ($k, $v) = each %options)
     {
-	$this->{'params'}{$k} = $v;
+	$this->{'options'}{$k} = $v;
     }
     bless $this, $type;
-    $this->prepare();
+    $this->_prepare();
+    $this->_build();
     return $this;
 }
 
 
 
-
-sub prepare
+sub _prepare
 {
     my $this = shift;
     
-    $this->spliturl() if $this->{params}{url};
+    my $opt = \%{$this->{options}};
+    my $req = \%{$this->{request}};
+    my $bld = \%{$this->{build}};
 
-    $this->{request}{template} =	'POST' if $this->{request}{postdata};
-    if (defined $this->{params}{method})
+    $this->_spliturl() if $opt->{url};
+    # if postdata is given, we'll set the request template to POST
+    $opt->{template} =	'POST' if $opt->{postdata};
+    if (defined $opt->{method})
     {
-	switch(lc($this->{params}{method}))
-	{
-	    case 'get' {	($this->{request}{method}, $this->{params}{template}) =	('GET','GET');		}
-	    case 'post' {	($this->{request}{method}, $this->{params}{template}) =	('POST','POST');	}
-	    case 'post' {	($this->{request}{method}, $this->{params}{template}) =	('TRACE','TRACE');	}
-	    case 'options' {	($this->{request}{method}, $this->{params}{template}) =	('OPTIONS','OPTIONS');	}
-	    else {		($this->{request}{method}, $this->{params}{template}) =	($this->{params}{method},'GET');	}
-	}
+	if(lc($opt->{method}) eq 'get' ) {    	($bld->{method}, $opt->{template}) = ('GET','GET');		}
+	elsif (lc($opt->{method}) eq 'post' ) {	($bld->{method}, $opt->{template}) = ('POST','POST');		}
+	elsif (lc($opt->{method}) eq 'post') {	($bld->{method}, $opt->{template}) = ('TRACE','TRACE');		}
+	elsif (lc($opt->{method}) eq 'options'){($bld->{method}, $opt->{template}) = ('OPTIONS','OPTIONS');	}
+	else {					($bld->{method}, $opt->{template}) = ($opt->{method},'GET');	}
     }
-    $this->{params}{template} ||=	'GET';
-    $this->{request}{method} ||=	'GET';
-    $this->{request}{protocol} =	$this->{params}{protocol}	|| 'HTTP/1.1';
-    $this->{request}{host} =		$this->{params}{host}		|| $this->{request}{host};
-    $this->{request}{vhost} =		$this->{params}{vhost}		|| $this->{request}{host};
-    $this->{request}{port} =		$this->{params}{port}		|| $this->{request}{port};
-    $this->{request}{crlf} =		$this->{params}{crlf}		|| "\r\n";
-    $this->{request}{hfs} =		$this->{params}{hfs}		|| ': ';
-    $this->{request}{uri} =		$this->{params}{uri}		if $this->{params}{uri};
-    $this->{request}{rawpostdata} =	$this->{params}{rawpostdata}	if $this->{params}{rawpostdata};
+    $opt->{template} ||=	'GET';
+    $bld->{method} ||=		'GET';
+    $bld->{protocol} =		$opt->{protocol}	|| 'HTTP/1.1';
+    $bld->{host} =		$opt->{host}		|| $bld->{host};
+    $bld->{vhost} =		$opt->{vhost}		|| $bld->{host};
+    $bld->{port} =		$opt->{port}		|| $bld->{port};
+    $bld->{crlf} =		$opt->{crlf}		|| "\r\n";
+    $bld->{hfs} =		$opt->{hfs}		|| ': ';
+    $bld->{uri} =		$opt->{uri}		if $opt->{uri};
+    $bld->{rawpostdata} =	$opt->{rawpostdata}	if $opt->{rawpostdata};
 
-    # default headers for FireFox
-    $this->{request}{headers}{'Host'} =			$this->{request}{vhost};
-    $this->{request}{headers}{'Connection'} =		'close';
-    $this->{request}{headers}{'User-Agent'} =		'Mozilla/5.0 no-gzip (X11; U; Linux i686; en-US; rv:1.8.1.6) Gecko/20070723 Iceweasel/2.0.0.6 (Debian-2.0.0.6-0etch1)';
-    $this->{request}{headers}{'Accept'} =		'text/xml,application/xml,application/xhtml+xml,text/html;q=0.9,text/plain;q=0.8,image/png,*/*;q=0.5';
-    $this->{request}{headers}{'Accept-Language'}=	'en-gb,en;q=0.7,hu;q=0.3';
-    $this->{request}{headers}{'Accept-Charset'}=	'ISO-8859-1,utf-8;q=0.7,*;q=0.7';
-    $this->{request}{headers}{'Accept-Encoding'}=	'identity;q=1';
-    if ($this->{params}{'http-auth'})
+    # default headers
+    $bld->{headers}{'Host'} =			$bld->{vhost};
+    $bld->{headers}{'Connection'} =		'close';
+    $bld->{headers}{'User-Agent'} =		'Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.8.1.6) Gecko/20070723 Iceweasel/2.0.0.6 (Debian-2.0.0.6-0etch1)';
+    $bld->{headers}{'Accept'} =			'text/xml,application/xml,application/xhtml+xml,text/html;q=0.9,text/plain;q=0.8,image/png,*/*;q=0.5';
+    $bld->{headers}{'Accept-Language'} =	'en-gb,en;q=0.7,hu;q=0.3';
+    $bld->{headers}{'Accept-Charset'} =		'ISO-8859-1,utf-8;q=0.7,*;q=0.7';
+    if ($opt->{'http-auth'})
     {
-	my $auth = encode_base64($this->{params}{'http-auth'});
+	my $auth = encode_base64($opt->{'http-auth'});
 	$auth =~ s/[\r\n]//;
-	$this->{request}{headers}{'Authorization'}=	'Basic '.$auth;
+	$bld->{headers}{'Authorization'} =	'Basic '.$auth;
     }
     # settin user defined headers
-    if($this->{params}{headers})
+    if($opt->{headers})
     {
-	my @arr = split /\[n\]/, $this->{params}{headers};
+	my @arr = @{$opt->{headers}};
 	foreach my $row (@arr)
 	{
 	    my ($k, $v) = split /\:\s*/, $row, 2;
-	    $this->{request}{headers}{$k} = $v;
+	    $bld->{headers}{$k} = $v;
 	}
     }
     # STRICT headers
-    if($this->{params}{'strict-headers'})
+    # ezt meg kell gyogyitani
+    if($opt->{'strict-headers'})
     {
-	$this->{request}{'strict-headers'} = $this->{params}{'strict-headers'};
-	$this->{request}{'strict-headers'} =~ s/\[n\]/\n/g;
+#	$bld->{'strict-headers'} = $opt->{'strict-headers'};
+#	$bld->{'strict-headers'} =~ s/\[n\]/\n/g;
     }
     else
     {
-	$this->{request}{'strict-headers'} = '';
+	$bld->{'strict-headers'} = '';
     }
-    $this->build();
 }
 
-sub build
+sub _build
 {
     my $this = shift;
+
+    my $opt = \%{$this->{options}};
+    my $req = \%{$this->{request}};
+    my $bld = \%{$this->{build}};
+
     my $payload;
-    switch ($this->{params}{template})
+    if ($opt->{template} eq 'GET')
     {
-	case 'GET'
-	{
-	    $payload = $this->{request}{method}.' '.$this->{request}{uri}.' '.$this->{request}{protocol}.$this->{request}{crlf};
-	    if( !$this->{params}{'no-default-headers'} )
+	    $payload = $bld->{method}.' '.$bld->{uri}.' '.$bld->{protocol}.$bld->{crlf};
+	    if( !$opt->{'no-default-headers'} )
 	    {
-		map { $payload .= $_.$this->{request}{hfs}.$this->{request}{headers}{$_}.$this->{request}{crlf} } sort sorthdr keys %{$this->{request}{headers}};
+		map {
+		    $payload .= $_.$bld->{hfs}.$bld->{headers}{$_}.$bld->{crlf}
+		} sort sorthdr keys %{$bld->{headers}};
 	    }
-	    $payload .= $this->{request}{'strict-headers'}.$this->{request}{crlf} if $this->{request}{'strict-headers'};
-	    $payload .= $this->{request}{crlf};
-	}
-	case 'POST'
-	{
-	    $payload = $this->{request}{method}.' '.$this->{request}{uri}.' '.$this->{request}{protocol}.$this->{request}{crlf};
-	    $this->{request}{headers}{'Content-Length'} = length($this->{request}{rawpostdata});
-	    if( !$this->{params}{'no-default-headers'} )
-	    {
-		map { $payload .= $_.$this->{request}{hfs}.$this->{request}{headers}{$_}.$this->{request}{crlf} } sort sorthdr keys %{$this->{request}{headers}};
-	    }
-	    $payload .= $this->{request}{'strict-headers'}.$this->{request}{crlf} if $this->{request}{'strict-headers'};
-	    $payload .= $this->{request}{crlf};
-	    $payload .= $this->{request}{rawpostdata};
-	}
-	case 'OPTIONS'
-	{
-	    $payload = $this->{request}{method}.' * '.$this->{request}{protocol}.$this->{request}{crlf};
-	    if( !$this->{params}{'no-default-headers'} )
-	    {
-		map { $payload .= $_.$this->{request}{hfs}.$this->{request}{headers}{$_}.$this->{request}{crlf} } sort sorthdr keys %{$this->{request}{headers}};
-	    }
-	    $payload .= $this->{request}{'strict-headers'}.$this->{request}{crlf} if $this->{request}{'strict-headers'};
-	    $payload .= $this->{request}{crlf};
-	}
-	case 'TRACE'
-	{
-	    $payload = $this->{request}{method}.' '.$this->{request}{uri}.' '.$this->{request}{protocol}.$this->{request}{crlf};
-	    if( !$this->{params}{'no-default-headers'} )
-	    {
-		map { $payload .= $_.$this->{request}{hfs}.$this->{request}{headers}{$_}.$this->{request}{crlf} } sort sorthdr keys %{$this->{request}{headers}};
-	    }
-	    $payload .= $this->{request}{'strict-headers'}.$this->{request}{crlf} if $this->{request}{'strict-headers'};
-	    $payload .= $this->{request}{crlf};
-	}
-	else
-	{
-	    # unknown method
-	}
+	    $payload .= $bld->{'strict-headers'}.$bld->{crlf} if $opt->{'strict-headers'};
+	    $payload .= $bld->{crlf};
     }
-    $this->{response} = $payload;
+    elsif ($opt->{template} eq 'POST')
+    {
+	    $payload = $bld->{method}.' '.$bld->{uri}.' '.$bld->{protocol}.$bld->{crlf};
+	    $bld->{headers}{'Content-Length'} = length($bld->{rawpostdata});
+	    if( !$opt->{'no-default-headers'} )
+	    {
+		map {
+		    $payload .= $_.$bld->{hfs}.$bld->{headers}{$_}.$bld->{crlf}
+		} sort sorthdr keys %{$bld->{headers}};
+	    }
+	    $payload .= $bld->{'strict-headers'}.$bld->{crlf} if $bld->{'strict-headers'};
+	    $payload .= $bld->{crlf};
+	    $payload .= $bld->{rawpostdata};
+    }
+    elsif ($opt->{template} eq 'OPTIONS')
+    {
+	#TODO
+	    $payload = $bld->{method}.' * '.$bld->{protocol}.$bld->{crlf};
+	    if( !$opt->{'no-default-headers'} )
+	    {
+		map {
+		    $payload .= $_.$bld->{hfs}.$bld->{headers}{$_}.$bld->{crlf}
+		} sort sorthdr keys %{$bld->{headers}};
+	    }
+	    $payload .= $bld->{'strict-headers'}.$bld->{crlf} if $bld->{'strict-headers'};
+	    $payload .= $bld->{crlf};
+    }
+    else
+    {
+	    # unknown method
+	    # TODO: do something here
+    }
+    $this->{request} = $payload;
 }
 
 sub get
 {
+#    my $this = shift;
+#    my $var = shift;
+#    my @o = split /\./, $var;
+#    # TODO
+#    return $this->{$o[0]} if scalar @o == 1;
+#    return $this->{$o[0]}{$o[1]} if scalar @o == 2;
+#    return $this->{$o[0]}{$o[1]}{$o[2]} if scalar @o == 3;
+#    return $this->{$o[0]}{$o[1]}{$o[2]}{$o[3]} if scalar @o == 4;
+}
+
+sub rq
+{
     my $this = shift;
-    return $this->{response};
+    my $var = shift;
+    my @o = split /\./, $var;
+    # TODO !
+    return $this->{'request'}{$o[0]} if scalar @o == 1;
+    return $this->{'request'}{$o[0]}{$o[1]} if scalar @o == 2;
+    return $this->{'request'}{$o[0]}{$o[1]}{$o[2]} if scalar @o == 3;
+    return $this->{'request'}{$o[0]}{$o[1]}{$o[2]}{$o[3]} if scalar @o == 4;
+}
+
+sub opt
+{
+    my $this = shift;
+    my $var = shift;
+    my @o = split /\./, $var;
+    # TODO !
+    return $this->{'options'}{$o[0]} if scalar @o == 1;
+    return $this->{'options'}{$o[0]}{$o[1]} if scalar @o == 2;
+    return $this->{'options'}{$o[0]}{$o[1]}{$o[2]} if scalar @o == 3;
+    return $this->{'options'}{$o[0]}{$o[1]}{$o[2]}{$o[3]} if scalar @o == 4;
+}
+
+
+sub set
+{
+#    my $this = shift;
+#    my $var = shift;
+#    my @split /\./, $var;
+#    return $this->{response};
 }
 
 sub sorthdr($$)
 {
-
     my @arr = qw/host user-agent accept accept-charset accept-language connection/;
     my $a = -1;
     my $b = -1;
@@ -354,49 +276,29 @@ sub sorthdr($$)
     return $a cmp -1;
 }
 
-
-sub spliturl
+# HANDLER -> SCHEME
+sub _spliturl
 {
     my $this = shift;
-    # $this->{request}{}
-#    my ($use_ssl, $uri_handler, $host, $port, $uri, $path, $file, $params, $href);    # return vars
-    my ($pre, $basic_auth,$tuff);     # tmp vars
+
+    my $opt = \%{$this->{options}};
+    my $req = \%{$this->{request}};
+    my $bld = \%{$this->{build}};
+
+    my ($pre, $basic_auth, $tuff);     # tmp vars
     # Ha nem http:// vagy https-el kezddodik akkor hozzacsapjuk
-    $this->{request}{url} = index(substr($this->{params}{url},4,4), '://') eq -1
-	?'http://'.$this->{params}{url}
-	:$this->{params}{url};
-    $this->debug('$this->{params}{url}');
-    
-    ($this->{request}{handler}, $tuff) = split '://', $this->{request}{url}, 2;
-    $this->debug('$this->{request}{handler}');
-
-    warn "Unknown protocol handler '".$this->{request}{handler}."'" if !CJ::HTTP::Request::in_array($this->{request}{handler}, qw/http https/);
-    ($this->{request}{host}, $this->{request}{uri}) = split '/', $tuff, 2;
-    $this->debug('$this->{request}{host}');
-    $this->debug('$this->{request}{uri}');
-
-    ($this->{request}{host}, $this->{request}{port}) = split ':', $this->{request}{host}, 2;
-    $this->debug('$this->{request}{host}');
-    $this->{request}{port} ||= $this->{request}{handler} eq 'https' ? 443 : 80;
-    $this->debug('$this->{request}{port}');
-
-    $this->{request}{uri} = defined $this->{request}{uri} ? '/'.$this->{request}{uri} : '/';
-    $this->debug('$this->{request}{uri}');
-
-    ($this->{request}{uri}, $this->{request}{href}) = split '#', $this->{request}{uri}, 2;
-    $this->debug('$this->{request}{uri}');
-    $this->debug('$this->{request}{href}');
-
-    $this->{request}{href} ||= '';
-    $this->debug('$this->{request}{href}');
-
-    ($this->{request}{file}, $this->{request}{get_params}) = split ('\?', $this->{request}{uri}, 2) if $this->{request}{uri} and index $this->{request}{uri}, '?';
-#    print STDERR "\n";
-    $this->debug('$this->{request}{uri}');
-    $this->debug('$this->{request}{get_params}');
-#    $this->{request}{href} ||= '';
-#    $this->debug('$this->{request}{href}');
-    
+    $bld->{url} = index(substr($opt->{url},4,4), '://') eq -1
+	? 'http://'.$opt->{url}
+	: $opt->{url};
+    ($bld->{scheme}, $tuff) = split '://', $bld->{url}, 2;
+    warn "Unknown protocol handler '".$bld->{handler}."'" if !in_array($bld->{scheme}, qw/http https/);
+    ($bld->{host}, $bld->{uri}) = split '/', $tuff, 2;
+    ($bld->{host}, $bld->{port}) = split ':', $bld->{host}, 2;
+    $bld->{port} ||= (($bld->{scheme} eq 'https') ? 443 : 80);
+    $bld->{uri} = defined $bld->{uri} ? '/'.$bld->{uri} : '/';
+    ($bld->{uri}, $bld->{href}) = split '#', $bld->{uri}, 2;
+    $bld->{href} ||= '';
+    ($bld->{file}, $bld->{get_params}) = split ('\?', $bld->{uri}, 2) if $bld->{uri} and index $bld->{uri}, '?';
     bless $this;
 }
 
@@ -425,36 +327,9 @@ sub in_array
 
 
 
-sub error
-{
-    return if !ERRORS;
-    my $this = shift;
-    my $msg = shift;
-    print STDERR "+ CJ::HTTP::Response->$msg\n";
-}
-
-sub debug_var
-{
-    return if !DEBUG;
-    my $this = shift;
-    my $var = shift;
-    my $val = eval($var)||'';
-    printf STDERR "+ \e[1;34mCJ::HTTP::Response->debug_var: \e[1;36m %-36s : \e[1;33m'%s'\e[0;39m\n", $var, $val;
-}
-
-sub debug
-{
-    return if !DEBUG;
-    my $this = shift;
-    my $msg = shift;
-    printf STDERR "+ \e[1;34mCJ::HTTP::Response->debug: \e[1;36m: \e[1;33m'%s'\e[0;39m\n", $msg;
-}
 
 
-
-
-
-sub new
+sub _new_response
 {
     my $type = shift;
     my $this = {};
@@ -471,16 +346,6 @@ sub new
     return $this;
 }
 
-
-sub in_array
-{
-    my $v = shift;
-    foreach(@_)
-    {
-	return 1 if $v eq $_;
-    }
-    return 0;
-}
 
 sub get_array
 {
@@ -501,7 +366,7 @@ sub get_hash
     return %ret;
 }
 
-sub help
+sub _help_nemfogkelleni
 {
     print '
     CJ::HTTP::Response->get(@array)
@@ -535,53 +400,40 @@ sub help
 ';
 }
 
-sub get
+sub getlofasz	
 {
     my $this = shift;
     my $val = shift||'';
-    switch($val)
-    {
-	# status line
-	case 'protocol'
-			{ return $this->{parsed}{status}{protocol};	}
-	case 'code'
-			{ return $this->{parsed}{status}{code};		}
-	case 'message'
-			{ return $this->{parsed}{status}{message};	}
-	case 'status'
-			{ return $this->{parsed}{status}{string};	}
+    # status line
+    if ($val eq 'protocol')		{ return $this->{parsed}{status}{protocol};	}
+	if ($val eq  'code')		{ return $this->{parsed}{status}{code};		}
+	if ($val eq  'message')		{ return $this->{parsed}{status}{message};	}
+	if ($val eq  'status')		{ return $this->{parsed}{status}{string};	}
 	# headers
-	case ['$headers','headers','headers.raw','headers.string']
-			{ return $this->{parsed}{headers}{string}; 	}
-	case ['@headers','headers.array']
-			{ return $this->{parsed}{headers}{array};	}
-	case ['%headers','headers.hash']
-			{ return $this->{parsed}{headers}{hash};	}
-	case ['headers.md5','head.md5']
-			{ return MD5->hexhash($this->{parsed}{headers}{string});	}
+	if ($val eq  ['$headers','headers','headers.raw','headers.string'])
+					{ return $this->{parsed}{headers}{string}; 	}
+	if ($val eq ['@headers','headers.array'])
+					{ return $this->{parsed}{headers}{array};	}
+	if ($val eq  ['%headers','headers.hash'])
+					{ return $this->{parsed}{headers}{hash};	}
+	if ($val eq  ['headers.md5','head.md5'])
+					{ return MD5->hexhash($this->{parsed}{headers}{string});	}
 	# body
-	case 'body.raw'
-			{ return $this->{parsed}{body}{raw};	 	}
-	case 'body.raw.md5'
-			{ return MD5->hexhash($this->{parsed}{body}{raw});	}
-	case 'body.raw.size'
-			{ return $this->{parsed}{body}{rawsize}; 	}
-	case 'body'
-			{ return $this->{parsed}{body}{parsed}; 	}
-	case 'body.md5'
-			{ return MD5->hexhash($this->{parsed}{body}{parsed}); 	}
-	case 'body.size'
-			{ return $this->{parsed}{body}{parsedsize}; 	}
+	if ($val eq  'body.raw')	{ return $this->{parsed}{body}{raw};	 	}
+	if ($val eq  'body.raw.md5')	{ return MD5->hexhash($this->{parsed}{body}{raw});	}
+	if ($val eq 'body.raw.size')	{ return $this->{parsed}{body}{rawsize}; 	}
+	if ($val eq 'body')		{ return $this->{parsed}{body}{parsed}; 	}
+	if ($val eq 'body.md5')		{ return MD5->hexhash($this->{parsed}{body}{parsed}); 	}
+	if ($val eq 'body.size')	{ return $this->{parsed}{body}{parsedsize}; 	}
 	# misc
-	case ['$errors','errors','errors.string']
-			{ return join "\n", $this->{parsed}{errors};	 }
-	case ['@errors','errors.array']
-			{ return $this->{parsed}{errors};	 	}
-	case 'help'
-			{ return $this->help;			 	}
-	else
-	    		{ $this->error("get: no such key '$val'"); 	}
-    }
+	if ($val eq  ['$errors','errors','errors.string'])
+					{ return join "\n", $this->{parsed}{errors};	 }
+	if ($val eq  ['@errors','errors.array'])
+					{ return $this->{parsed}{errors};	 	}
+	if ($val eq  'help')		{ return $this->help;			 	}
+	else		    		{
+#	    $this->error("get: no such key '$val'"); 
+	}
 }
 sub parse
 {
@@ -657,7 +509,6 @@ sub parse_chunked_body
 
 1;
 __END__
-# Below is stub documentation for your module. You'd better edit it!
 
 =head1 NAME
 
